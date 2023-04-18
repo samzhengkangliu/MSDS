@@ -1,0 +1,145 @@
+---
+title: "DTSA5301 NYPD Project"
+author: "Zhengkang Liu"
+date: "2023-03-31"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+### Before you start
+You will need to load the below necessary packages, make sure you load it with no errors:
+```{r load packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(anytime)
+library(dplyr)
+library(ggplot2)
+```
+
+### Part 1. Get NYPD Shooting Incident Data
+```{r get_nypd_shooting_incident_data, results='hide', message=FALSE}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+raw_data <- read_csv(url_in)
+```
+
+### Part 2. Tidy and Transform Data
+```{r explore data, message=FALSE}
+str(raw_data)
+
+head(raw_data)
+
+summary(raw_data)
+```
+
+There are total of 19 columns and 25596 rows based on the above commands and the column names are:
+- INCIDENT_KEY (Randomly generated persistent ID for each arrest)
+- OCCUR_DATE
+- OCCUR_TIME
+- BORO (Borough where the shooting incident occurred)
+- PRECINCT (Precinct where the shooting incident occurred)
+- JURISDICTION_CODE
+- LOCATION_DESC
+- STATISTICAL_MURDER_FLAG (Shooting resulted in the victim’s death which would be counted as a murder)
+- PERP_AGE_GROUP (Perpetrator’s age within a category)
+- PERP_SEX
+- PERP_RACE
+- VIC_AGE_GROUP (Victim’s age within a category)
+- VIC_SEX
+- VIC_RACE
+- X_COORD_CD
+- Y_COORD_CD
+- Latitude
+- Longitude
+- Lon_Lat
+(Note: The above column's detailed description are found here: https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8)
+
+Now we can start dropping the columns we are not interested in. For this project, I will drop INCIDENT_KEY, PRECINCT, JURISDICTION_CODE, LOCATION_DESC, X_COORD_CD, Y_COORD_CD, Latitude, Longitude and Lon_Lat.
+
+
+```{r tidy raw data}
+raw_data <- raw_data %>% select(OCCUR_DATE, OCCUR_TIME, BORO, STATISTICAL_MURDER_FLAG, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE)
+
+str(raw_data)
+```
+
+Another important step is to find any missing data. To do this, we can use:
+```{r find missing data}
+sapply(raw_data, function(x) sum(is.na(x)))
+```
+
+As a result of the above function, there are 3 columns that contains missing values: PERP_AGE_GROUP, PERP_SEX, and PERP_RACE. For this project, I will drop these 3 columns for simplicity.
+```{r drop columns that has missing data}
+processed_data <- subset(raw_data, select = -c(PERP_AGE_GROUP, PERP_SEX, PERP_RACE))
+```
+
+After dropping the missing data columns, we can now fix the data type for OCCUR_DATE to make it as Datetime type, plus combining the OCCUR_DATE and OCCUR_TIME column. Then we can transform STATISTICAL_MURDER_FLAG and make it more consistent with other columns.
+
+```{r fix data types and combine columns}
+processed_data$OCCUR_DATE <- anytime(processed_data$OCCUR_DATE)
+processed_data$STATISTICAL_MURDER_FLAG <- as.character(processed_data$STATISTICAL_MURDER_FLAG)
+processed_data <- processed_data %>% mutate_if(is.character, as.factor)
+
+processed_data$OCCUR_DATETIME <- with(processed_data, anytime(paste(OCCUR_DATE, OCCUR_TIME)))
+processed_data <- subset(processed_data, select = -c(OCCUR_DATE, OCCUR_TIME))
+str(processed_data)
+```
+
+### Part 3: Visualizations and Analysis
+
+```{r incidents by borough}
+shooting_incidents_by_BORO <- processed_data %>% 
+  group_by(BORO) %>% 
+  summarise(count = n())%>%
+  mutate(freq = round(count / sum(count), 4))
+shooting_incidents_by_BORO
+```
+
+As we can see, the top 5 incidents area are BROOKLYN, BRONX, QUEENS, MANHATTAN and STATEN ISLAND. Based on the below graph, it verifies that the highest number of shooting incidents of all age groups is indeed in Brooklyn.
+
+```{r borough graph}
+ggplot(shooting_incidents_by_BORO, aes(BORO, freq)) + 
+    geom_bar(stat="identity", position="dodge",fill = "red")
+```
+
+So what years do the incidents happen the most?
+```{r incidents by year}
+shooting_incidents_by_year <- processed_data %>% 
+  mutate(year=year(strptime(OCCUR_DATETIME, '%Y')) %>% as.character()) %>% 
+  group_by(year) %>% 
+  summarise(count = n())%>%
+  mutate(freq = round(count / sum(count), 4))
+shooting_incidents_by_year
+summary(shooting_incidents_by_year)
+```
+
+The maximum of shooting incidents happened in 2006 and was 2055. The below graph shown that the incidents were declining from 2006 to 2019, but it became viral again starting from 2020. 
+
+``` {r plot year data}
+shooting_incidents_by_year%>% 
+  filter(count>0)%>%
+  ggplot(aes(x=year, y=count))+
+  geom_point(aes(color="count"))+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90))+
+  labs(title = "NY Shooting Incident Data By Year", y=NULL)
+```
+
+In terms of modeling the above year data, here is what I did:
+```{r model shooting incidents dataset}
+mod <- lm(count ~ poly(as.integer(year), 2, raw = TRUE), data=shooting_incidents_by_year)
+summary(mod)
+
+shooting_incidents_year_pred <- shooting_incidents_by_year %>% mutate(pred=predict(mod))
+shooting_incidents_year_pred
+
+shooting_incidents_year_pred %>% ggplot() + geom_point(aes(x=as.integer(year), y=count), color="blue") + geom_point(aes(x=as.integer(year), y=pred), color="red")
+```
+
+The model's R^2 is 0.4724 and the p value is 0.01568, which does a relatively good job on prediction. But it can be better off if we use more precise variable such as time. 
+
+
+### Part 4: Bias Identification
+1. Sources of bias: The shooting incidents may not be straightforward to be found and the cases reported for perpetrator are missing
+
+2. Based on my partial analysis, it indicates that victims are most frequently happened in BROOKLYN and BRONX.
+
