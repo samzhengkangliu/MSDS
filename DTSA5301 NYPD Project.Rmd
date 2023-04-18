@@ -3,8 +3,8 @@ title: "DTSA5301 NYPD Project"
 author: "Zhengkang Liu"
 date: "2023-03-31"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ### Before you start
@@ -69,6 +69,7 @@ sapply(raw_data, function(x) sum(is.na(x)))
 ```
 
 As a result of the above function, there are 3 columns that contains missing values: PERP_AGE_GROUP, PERP_SEX, and PERP_RACE. For this project, I will drop these 3 columns for simplicity.
+
 ```{r drop columns that has missing data}
 processed_data <- subset(raw_data, select = -c(PERP_AGE_GROUP, PERP_SEX, PERP_RACE))
 ```
@@ -135,11 +136,15 @@ shooting_incidents_year_pred
 shooting_incidents_year_pred %>% ggplot() + geom_point(aes(x=as.integer(year), y=count), color="blue") + geom_point(aes(x=as.integer(year), y=pred), color="red")
 ```
 
-The model's R^2 is 0.4724 and the p value is 0.01568, which does a relatively good job on prediction. But it can be better off if we use more precise variable such as time. 
+The model's R^2 is 0.4724 and the p value is 0.01568, which does a relatively good job on prediction. But it can be better off if we use more precise variable such as time in hours. 
 
 
-### Part 4: Bias Identification
-1. Sources of bias: The shooting incidents may not be straightforward to be found and the cases reported for perpetrator are missing
+### Part 4: Bias Identification and Summary
+Bias Identification: 
 
-2. Based on my partial analysis, it indicates that victims are most frequently happened in BROOKLYN and BRONX.
+- Sources of bias: The shooting incidents may not be straightforward to be found and the cases reported for perpetrator are missing
+
+- Group attribution bias (potential): a tendency to generalize what is true of individuals to an entire group to which they belong
+
+Based on my partial analysis and to summarize, it indicates that victims are most frequently happened in BROOKLYN and BRONX from 2006 to 2021. Back in 2006 was the most rival time for gun violence and there is a higher chance of more gun violence happening in the near future. 
 
